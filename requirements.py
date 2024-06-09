@@ -1,0 +1,4 @@
+numerize
+fastapi
+pyairtable
+pandas
