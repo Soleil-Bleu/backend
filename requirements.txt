@@ -2,3 +2,4 @@ numerize
 fastapi
 pyairtable
 pandas
+httpx
