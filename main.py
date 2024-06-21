@@ -1,11 +1,11 @@
 import os
 import logging
-from typing import List, Optional, Annotated
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from typing import Optional
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import pandas as pd
 from calculs import simulation, choisir_puissance, import_data
+from fastapi.encoders import jsonable_encoder
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,7 +18,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     "http://localhost:5174",
-    "*" #TODO enlever quand on sait l'adresse du front
+    "*"  # TODO: remove when the front-end address is known
 ]
 
 app.add_middleware(
@@ -39,9 +39,9 @@ class SimulationRequest(BaseModel):
     devis_installation: bool = Field(False, description="Whether to include installation costs in the quote")
     localisation: str = Field("localisation", description="The location of the installation")
     annee: int = Field(2022, ge=2000, le=2100, description="The year of the simulation must be between 2000 and 2100")
-    puissances: Optional[List[Annotated[float, Field(gt=0)]]] = Field(None, description="List of power values to simulate")
+    puissance_min: float = Field(..., gt=0, description="The minimum power value to simulate")
+    puissance_max: float = Field(..., gt=0, description="The maximum power value to simulate")
 
-# A dictionary to store results, in a real application this should be a database
 results_store = {}
 
 def calculate_simulation_task(request_id: int, request: SimulationRequest, file_path: str):
@@ -51,15 +51,14 @@ def calculate_simulation_task(request_id: int, request: SimulationRequest, file_
     try:
         logger.debug("Starting calculation task for request ID %d", request_id)
 
-        if request.puissances is None or not request.puissances:
-            request.puissances = choisir_puissance('jsp')
+        puissances = choisir_puissance(request.puissance_min, request.puissance_max)
 
         df_ENEDIS, constantes_ENEDIS = import_data(file_path, request.annee)
 
         logger.debug("Data imported successfully for request ID %d", request_id)
 
         results = []
-        for puissance in request.puissances:
+        for puissance in puissances:
             result = simulation(
                 puissance, request.id, df_ENEDIS, constantes_ENEDIS, request.annee,
                 request.devis_installation, request.prix_achat, request.type_centrale,
@@ -77,16 +76,7 @@ def calculate_simulation_task(request_id: int, request: SimulationRequest, file_
 @app.post("/calc_simulation", response_model=dict)
 async def calc_simulation(
     background_tasks: BackgroundTasks,
-    id: int = Form(...),
-    prix_achat: int = Form(..., gt=0, description="The purchase price must be positive"),
-    type_centrale: str = Form(...),
-    montant_pret: int = Form(..., gt=0, description="The loan amount must be positive"),
-    taux_pret: float = Form(..., gt=0, le=1, description="The loan interest rate must be between 0 and 1"),
-    duree_pret: int = Form(..., gt=0, description="The loan duration in years must be positive"),
-    devis_installation: bool = Form(False, description="Whether to include installation costs in the quote"),
-    localisation: str = Form("localisation", description="The location of the installation"),
-    annee: int = Form(2022, ge=2000, le=2100, description="The year of the simulation must be between 2000 and 2100"),
-    puissances: Optional[List[float]] = Form(None, description="List of power values to simulate"),
+    simulation_request: SimulationRequest = Depends(),
     file: UploadFile = File(...)
 ):
     """
@@ -98,25 +88,12 @@ async def calc_simulation(
     with open(file_location, "wb") as f:
         f.write(file.file.read())
 
-    request_data = SimulationRequest(
-        id=id,
-        prix_achat=prix_achat,
-        type_centrale=type_centrale,
-        montant_pret=montant_pret,
-        taux_pret=taux_pret,
-        duree_pret=duree_pret,
-        devis_installation=devis_installation,
-        localisation=localisation,
-        annee=annee,
-        puissances=puissances
-    )
-
-    logger.info("Received simulation request: %s", request_data)
+    logger.info("Received simulation request: %s", jsonable_encoder(simulation_request))
 
     # Add the simulation task to background tasks
-    background_tasks.add_task(calculate_simulation_task, id, request_data, file_location)
+    background_tasks.add_task(calculate_simulation_task, simulation_request.id, simulation_request, file_location)
 
-    return {"status": "Processing", "request_id": id}
+    return {"status": "Processing", "request_id": simulation_request.id}
 
 @app.get("/simulation_result/{request_id}", response_model=dict)
 async def get_simulation_result(request_id: int):

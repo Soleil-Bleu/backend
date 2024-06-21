@@ -199,10 +199,20 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, devis_install
         return {"error": str(e)}
 
 # Choose power function
-def choisir_puissance(choix_puissance, puissance_choisie=100):
-    if choix_puissance == 'puissance precise':
-        return [puissance_choisie]
-    elif choix_puissance == 'puissance potentielle':
-        return [i * puissance_choisie / 10 for i in range(1, 12)]
-    else:
-        return [3, 9, 15, 25, 36, 50, 75, 100, 125, 150, 175, 200, 300, 400, 500]
+def choisir_puissance(puissance_min, puissance_max):
+    """
+    Choose 12 evenly distributed power values between a given minimum and maximum.
+
+    Args:
+        puissance_min (float): Minimum power value.
+        puissance_max (float): Maximum power value.
+
+    Returns:
+        List[float]: List of 12 evenly distributed power values between min and max.
+    """
+    try:
+        step = (puissance_max - puissance_min) / 11
+        return [puissance_min + step * i for i in range(12)]
+    except Exception as e:
+        logging.error(f"Error in choisir_puissance: {str(e)}")
+        raise
