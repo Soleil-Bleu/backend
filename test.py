@@ -19,11 +19,10 @@ class TestSoleilBleuAPI(unittest.TestCase):
             "montant_pret": "50000",
             "taux_pret": "0.23",
             "duree_pret": "10",
-            "devis_installation": "false",
+            "devis_installation": "0",
             "localisation": "localisation",
             "annee": "2022",
-            "puissance_min": "10",
-            "puissance_max": "1000",
+            "puissances": "[100, 300]",
         }
 
         # Test the simulation endpoint

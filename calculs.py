@@ -16,17 +16,6 @@ COLUMNS_TO_DROP = [
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def import_data(file_path, annee):
-    """
-    Load ENEDIS and irradiation data, perform DataFrame manipulations, and return the resulting DataFrame and constants.
-
-    Args:
-        file_path (str): Path to the ENEDIS file.
-        annee (int): Year to filter in the DataFrame.
-
-    Returns:
-        pd.DataFrame: Resulting DataFrame after manipulations.
-        dict: Dictionary of ENEDIS constants.
-    """
     try:
         df = pd.read_csv(file_path, sep=';', encoding='ISO-8859-1', dtype='unicode')
         df_irrad = pd.read_csv(IRRADIATION_URL, sep=';', encoding='ISO-8859-1', dtype='unicode')
@@ -85,28 +74,7 @@ def import_data(file_path, annee):
         logging.error(f"Error in import_data: {str(e)}")
         raise
 
-# Simulation function
-def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, devis_installation, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
-    """
-    Perform a simulation based on various parameters for a given power and append the result to the results table.
-
-    Args:
-        puissance (float): Power for the simulation.
-        id (int)
-        df_ENEDIS (pd.DataFrame): ENEDIS data DataFrame.
-        constantes_ENEDIS (dict): Dictionary of ENEDIS constants.
-        annee (int): Year for the simulation.
-        devis_installation (bool): Indicates if an installation quote is available.
-        prix_achat (float): Purchase price of electricity.
-        type_centrale (str): Type of plant ('toiture' or 'ombriere').
-        localisation (str): GPS coordinates or location.
-        montant_pret_bancaire (float): Amount of the bank loan.
-        taux_pret_bancaire (float): Interest rate of the bank loan.
-        duree_pret_bancaire (int): Duration of the bank loan in years.
-
-    Returns:
-        dict: Simulation result
-    """
+def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
     try:
         total_consumption = constantes_ENEDIS['total_consumption']
         production_unitaire = constantes_ENEDIS['production_unitaire']
@@ -143,9 +111,18 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, devis_install
         tot_production = production_unitaire * puissance
         tot_energie_surplus = df['energie_surplus'].sum() / 1000
 
-        # Calculate auto-consumption and auto-production rates in %
-        taux_AC = 1 - (tot_energie_surplus / tot_production)
-        taux_AP = (taux_AC * tot_production) / total_consumption
+        # Log the relevant variables
+        logging.debug(f"Total Production: {tot_production}")
+        logging.debug(f"Total Energy Surplus: {tot_energie_surplus}")
+
+        # Safeguard against division by zero
+        if tot_production == 0:
+            logging.warning("Total production is zero, setting autoconso and autoprod to zero.")
+            taux_AC = 0
+            taux_AP = 0
+        else:
+            taux_AC = 1 - (tot_energie_surplus / tot_production)
+            taux_AP = (taux_AC * tot_production) / total_consumption if total_consumption != 0 else 0
 
         # Calculate installation costs
         courbe_tendence = {
@@ -162,19 +139,18 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, devis_install
         prix_onduleur = 50.025 # inverter replacement cost per year per kWc
         nettoyage = 500 # cleaning, insurance, management cost
 
-        if not devis_installation: # if no quote
-            courbe = courbe_tendence[type_centrale]
-            if puissance <= 100:
-                cout_installation = (courbe['inf_100']['A'] * math.log(puissance) + courbe['inf_100']['B']) * puissance
-            else:
-                cout_installation = (courbe['sup_100']['A'] * puissance + courbe['sup_100']['B']) * puissance
+        # if not devis_installation: # if quote = 0€ (default)
+        courbe = courbe_tendence[type_centrale]
+        if puissance <= 100:
+            cout_installation = (courbe['inf_100']['A'] * math.log(puissance) + courbe['inf_100']['B']) * puissance
         else:
-            cout_installation = devis_installation
+            cout_installation = (courbe['sup_100']['A'] * puissance + courbe['sup_100']['B']) * puissance
+        # else: cout_installation = devis_installation
 
         # Calculate maintenance cost per year, annual profits, amortization and 20-year balance
         cout_maintenance = puissance * prix_onduleur + nettoyage
         benefices_an_brut = (
-            productible * puissance * prix_achat * taux_AC + 
+            productible * puissance * prix_achat*100 * taux_AC + 
             productible * puissance * prix_vente * (1 - taux_AC) - 
             cout_maintenance
         )
@@ -182,37 +158,38 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, devis_install
             benefices_an_brut - 
             montant_pret_bancaire * taux_pret_bancaire
         )
-        amortissement = cout_installation / benefices_an_pret
-        bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire * duree_pret_bancaire
+        amortissement = cout_installation / benefices_an_pret if benefices_an_pret != 0 else float('inf')
+        bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
 
         return {
             "puissance": puissance,
-            "id_formulaire": id,
-            "amortissement": numerize.numerize(amortissement),
+            "amortissement": round(amortissement, 3 - int(math.floor(math.log10(abs(amortissement)))) - 1),
             "autoconso": round(taux_AC * 100, 1),
             "autoprod": round(taux_AP * 100, 1),
-            "benef_20_ans": numerize.numerize(bilan_20_ans),
-            "tri": None, # TODO
+            "bilan_20_ans": round(bilan_20_ans, 3 - int(math.floor(math.log10(abs(bilan_20_ans)))) - 1),
+            "tri": 1, # TODO
         }
     except Exception as e:
         logging.error(f"Error in simulation: {str(e)}")
         return {"error": str(e)}
 
+
 # Choose power function
 def choisir_puissance(puissance_min, puissance_max):
     """
-    Choose 12 evenly distributed power values between a given minimum and maximum.
+    Choose 12 evenly distributed integer power values between a given minimum and maximum.
 
     Args:
         puissance_min (float): Minimum power value.
         puissance_max (float): Maximum power value.
 
     Returns:
-        List[float]: List of 12 evenly distributed power values between min and max.
+        List[int]: List of 12 evenly distributed integer power values between min and max.
     """
     try:
         step = (puissance_max - puissance_min) / 11
-        return [puissance_min + step * i for i in range(12)]
+        return [int(puissance_min + step * i) for i in range(12)]
     except Exception as e:
         logging.error(f"Error in choisir_puissance: {str(e)}")
         raise
+
