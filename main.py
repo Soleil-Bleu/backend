@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
-from calculs import simulation, choisir_puissance, import_data
+from calculs import simulation, choisir_puissance, import_data, calculate_scenarios
 from fastapi.encoders import jsonable_encoder
 import json
 
@@ -54,15 +54,17 @@ def calculate_simulation_task(request_id: int, request: SimulationRequest, file_
 
         df_ENEDIS, constantes_ENEDIS = import_data(file_path, request.annee)
 
-        results = []
+        points_simu = []
         for puissance in puissances:
             result = simulation(
                 puissance, request.id, df_ENEDIS, constantes_ENEDIS, request.annee, 
                 request.prix_achat, request.type_centrale,
                 request.localisation, request.montant_pret, request.taux_pret, request.duree_pret
             )
-            results.append(result)
-        results_store[request_id] = {"status": "Completed", "results": results}
+            points_simu.append(result)
+        scenarios = calculate_scenarios(points_simu, 500, 1000) #TODO
+        results_store[request_id] = {"status": "Completed", "results": {"points_simu":points_simu,"scenarios":scenarios}}
+
     except Exception as e:
         logger.error(f"Error in calculate_simulation_task: {str(e)}")
         results_store[request_id] = {"status": "Error", "error": str(e)}

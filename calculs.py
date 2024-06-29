@@ -56,7 +56,7 @@ def import_data(file_path, annee):
 
         df['Irradiation'] = pd.to_numeric(df['Irradiation'], errors='coerce')
 
-        # Convert power to kWh
+        # Converti conso en kWh
         df['Valeur'] = df['Valeur'].astype(float) / 1000
 
         total_consumption = df['Valeur'].sum() / (60000 / constants['pas_en_minutes'])
@@ -72,6 +72,24 @@ def import_data(file_path, annee):
         return df, {'total_consumption': total_consumption, 'production_unitaire': production_unitaire, **constants}
     except Exception as e:
         logging.error(f"Error in import_data: {str(e)}")
+        raise
+# Choose power function
+def choisir_puissance(puissance_min, puissance_max):
+    """
+    Choose 12 evenly distributed integer power values between a given minimum and maximum.
+
+    Args:
+        puissance_min (float): Minimum power value.
+        puissance_max (float): Maximum power value.
+
+    Returns:
+        List[int]: List of 12 evenly distributed integer power values between min and max.
+    """
+    try:
+        step = (puissance_max - puissance_min) / 11
+        return [int(puissance_min + step * i) for i in range(1,13)]
+    except Exception as e:
+        logging.error(f"Error in choisir_puissance: {str(e)}")
         raise
 
 def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
@@ -97,7 +115,7 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, t
             110 if puissance <= 100 else
             0
         )
-
+    
         df['production_theorique'] *= puissance
         df['energie_surplus'] = df.apply(
             lambda row: 0 if row['production_theorique'] < row['Valeur'] else (row['production_theorique'] - row['Valeur']) / (60 / pas_en_minutes),
@@ -173,23 +191,41 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, t
         logging.error(f"Error in simulation: {str(e)}")
         return {"error": str(e)}
 
-
-# Choose power function
-def choisir_puissance(puissance_min, puissance_max):
-    """
-    Choose 12 evenly distributed integer power values between a given minimum and maximum.
-
-    Args:
-        puissance_min (float): Minimum power value.
-        puissance_max (float): Maximum power value.
-
-    Returns:
-        List[int]: List of 12 evenly distributed integer power values between min and max.
-    """
-    try:
-        step = (puissance_max - puissance_min) / 11
-        return [int(puissance_min + step * i) for i in range(12)]
-    except Exception as e:
-        logging.error(f"Error in choisir_puissance: {str(e)}")
-        raise
+def calculate_scenarios(data, surface_available, total_consumption):
+    scenarios = {}
+    
+    # Puissance maximale
+    scenarios['puissance_max'] = surface_available / 5
+    
+    # Amortissement le plus rapide
+    amortissement_rapide = min(data, key=lambda x: x['amortissement'])
+    scenarios['amortissement_rapide'] = amortissement_rapide['puissance']
+    
+    # 100% autoconsommation
+    autoconso_100 = [d for d in data if d['autoconso'] > 99]
+    if autoconso_100:
+        scenarios['autoconso_100'] = autoconso_100[-1]['puissance']
+    else:
+        scenarios['autoconso_100'] = None
+    
+    # BEPOS
+    bepos = None
+    for d in data:
+        if d['autoprod'] >= total_consumption:
+            bepos = d
+            break
+    if bepos:
+        scenarios['bepos'] = bepos['puissance']
+    else:
+        scenarios['bepos'] = None
+    
+    # Bénéfices les plus importants
+    benefices_max = max(data, key=lambda x: x['bilan_20_ans'])
+    scenarios['benefices_max'] = benefices_max['puissance']
+    
+    # Le plus rentable
+    rentable = max(data, key=lambda x: x['tri'])
+    scenarios['rentable'] = rentable['puissance']
+    
+    return scenarios
 
