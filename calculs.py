@@ -40,6 +40,25 @@ def import_data(file_path, annee):
         df['Timestamp'] = pd.to_datetime(df['Date de la mesure'] + ' ' + df['Heure de la mesure'], format='%d-%m-%Y %H:%M')
         df.drop(columns=['Date de la mesure', 'Heure de la mesure'], inplace=True)
 
+        # Trouver les années complètes disponibles
+        df['Year'] = df['Timestamp'].dt.year
+        periods_per_year = {
+            5: 105120,   # 5 minutes intervals in a year
+            10: 52560,   # 10 minutes intervals in a year
+            30: 17520    # 30 minutes intervals in a year
+        }
+        periods_required = periods_per_year[constants['pas_en_minutes']]
+
+        # Vérifier que chaque année a le bon nombre de périodes et toutes les valeurs présentes
+        complete_years = df.groupby('Year').filter(lambda x: len(x) == periods_required and x['Valeur'].notna().all())['Year'].unique()
+        
+        if len(complete_years) == 0:
+            raise ValueError("Aucune année complète trouvée dans les données avec toutes les valeurs présentes. Vérifiez que le fichier CSV transmis par ENEDIS soit complet sur au moins une année, sinon vous pouvez essayer d'approximer ces données manquantes en copiant celles d'autres périodes. Si les périodes sont trop longues, contactez nous ! ")
+        else :
+            # Sélectionner l'année complète la plus récente
+            annee = complete_years.max()
+            raise ValueError("Votre année de référence de consommation est :",annee)
+        
         # Filter by year
         df = df[df['Timestamp'].dt.year == annee].copy(deep=True)
 
@@ -178,7 +197,6 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, t
         )
         amortissement = cout_installation / benefices_an_pret if benefices_an_pret != 0 else float('inf')
         bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
-
         return {
             "puissance": puissance,
             "amortissement": round(amortissement, 3 - int(math.floor(math.log10(abs(amortissement)))) - 1),
