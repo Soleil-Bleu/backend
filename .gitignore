@@ -2,3 +2,5 @@
 __pycache__
 files
 # data_exemple.csv
+__pycache__/main.cpython-39.pyc
+__pycache__/calculs.cpython-39.pyc
