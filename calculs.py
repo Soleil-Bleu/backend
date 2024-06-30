@@ -15,7 +15,7 @@ COLUMNS_TO_DROP = [
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def import_data(file_path, annee):
+def import_data(file_path):
     try:
         df = pd.read_csv(file_path, sep=';', encoding='ISO-8859-1', dtype='unicode')
         df_irrad = pd.read_csv(IRRADIATION_URL, sep=';', encoding='ISO-8859-1', dtype='unicode')
@@ -40,6 +40,23 @@ def import_data(file_path, annee):
         df['Timestamp'] = pd.to_datetime(df['Date de la mesure'] + ' ' + df['Heure de la mesure'], format='%d-%m-%Y %H:%M')
         df.drop(columns=['Date de la mesure', 'Heure de la mesure'], inplace=True)
 
+        # Find complete years
+        df['Year'] = df['Timestamp'].dt.year
+        periods_per_year = {
+            5: 105120,   # 5 minutes intervals in a year
+            10: 52560,   # 10 minutes intervals in a year
+            30: 17520    # 30 minutes intervals in a year
+        }
+        periods_required = periods_per_year[constants['pas_en_minutes']]
+
+        complete_years = df.groupby('Year').filter(lambda x: len(x) == periods_required and x['Valeur'].notna().all())['Year'].unique()
+        
+        if len(complete_years) == 0:
+            raise ValueError("Aucune année complète trouvée dans les données avec toutes les valeurs présentes. Vérifiez que le fichier CSV transmis par ENEDIS soit complet sur au moins une année, sinon vous pouvez essayer d'approximer ces données manquantes en copiant celles d'autres périodes. Si les périodes sont trop longues, contactez nous ! ")
+        else:
+            # Select the most recent complete year
+            annee = complete_years.max()
+        
         # Filter by year
         df = df[df['Timestamp'].dt.year == annee].copy(deep=True)
 
@@ -56,7 +73,7 @@ def import_data(file_path, annee):
 
         df['Irradiation'] = pd.to_numeric(df['Irradiation'], errors='coerce')
 
-        # Converti conso en kWh
+        # Convert consumption to kWh
         df['Valeur'] = df['Valeur'].astype(float) / 1000
 
         total_consumption = df['Valeur'].sum() / (60000 / constants['pas_en_minutes'])
@@ -73,26 +90,20 @@ def import_data(file_path, annee):
     except Exception as e:
         logging.error(f"Error in import_data: {str(e)}")
         raise
-# Choose power function
-def choisir_puissance(puissance_min, puissance_max):
-    """
-    Choose 12 evenly distributed integer power values between a given minimum and maximum.
 
-    Args:
-        puissance_min (float): Minimum power value.
-        puissance_max (float): Maximum power value.
 
-    Returns:
-        List[int]: List of 12 evenly distributed integer power values between min and max.
-    """
+def choisir_puissance(surface_max):
     try:
-        step = (puissance_max - puissance_min) / 11
-        return [int(puissance_min + step * i) for i in range(1,13)]
+        puissance_max = math.floor(surface_max / 5)
+        step = puissance_max  / 13
+        puissances = [int(step * i) for i in range(1, 13)]
+        logging.info(f"Puissances considérées : {puissances}")
+        return puissances
     except Exception as e:
-        logging.error(f"Error in choisir_puissance: {str(e)}")
+        logging.error(f"Erreur dans choisir_puissance: {str(e)}")
         raise
 
-def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
+def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
     try:
         total_consumption = constantes_ENEDIS['total_consumption']
         production_unitaire = constantes_ENEDIS['production_unitaire']
@@ -191,11 +202,13 @@ def simulation(puissance, id, df_ENEDIS, constantes_ENEDIS, annee, prix_achat, t
         logging.error(f"Error in simulation: {str(e)}")
         return {"error": str(e)}
 
-def calculate_scenarios(data, surface_available, total_consumption):
+def calculate_scenarios(data, conso_totale):
+    logging.info("Calculating scenarios for data : %s", data)
     scenarios = {}
     
     # Puissance maximale
-    scenarios['puissance_max'] = surface_available / 5
+    puissance_max = max(data, key=lambda x: x['puissance'])
+    scenarios['puissance_max'] = puissance_max['puissance']
     
     # Amortissement le plus rapide
     amortissement_rapide = min(data, key=lambda x: x['amortissement'])
@@ -211,7 +224,7 @@ def calculate_scenarios(data, surface_available, total_consumption):
     # BEPOS
     bepos = None
     for d in data:
-        if d['autoprod'] >= total_consumption:
+        if d['autoprod'] >= conso_totale:
             bepos = d
             break
     if bepos:

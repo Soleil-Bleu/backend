@@ -32,42 +32,52 @@ class SimulationRequest(BaseModel):
     id: int
     prix_achat: int = Field(..., gt=0, description="The purchase price must be positive")
     type_centrale: str = Field(..., description="The type of power plant")
+    localisation: int = Field(..., description="The location of the installation")
+    surface: float = Field(..., gt=0, description="The surface area of the installation must be positive")
     montant_pret: Optional[int] = Field(0, ge=0, description="The loan amount must be positive")
     taux_pret: Optional[float] = Field(0, ge=0, le=100, description="The loan interest rate must be between 0 and 100")
     duree_pret: Optional[int] = Field(0, ge=0, description="The loan duration in years must be positive")
-    localisation: str = Field(..., description="The location of the installation")
-    annee: int = Field(..., ge=2000, le=2100, description="The year of the simulation must be between 2000 and 2100")
-    puissances: List[int] = Field(..., description="The minimum and maximum power value to simulate")
 
 results_store = {}
 
-def calculate_simulation_task(request_id: int, request: SimulationRequest, file_path: str):
+def calculate_simulation_task(request: SimulationRequest, file_path: str):
     """
     Function to perform the long-running simulation task.
     """
     try:
-        logger.info(f"Starting calculation task for request ID {request_id}")
-        results_store[request_id] = {"status": "Processing"}
+        logger.info(f"Starting calculation task for request ID {request.id}")
+        results_store[request.id] = {"status": "Processing"}
 
-        puissance_min, puissance_max = request.puissances[0], request.puissances[-1]
-        puissances = choisir_puissance(puissance_min, puissance_max)
+        puissances = choisir_puissance(request.surface)
 
-        df_ENEDIS, constantes_ENEDIS = import_data(file_path, request.annee)
+        df_ENEDIS, constantes_ENEDIS = import_data(file_path)
 
         points_simu = []
         for puissance in puissances:
             result = simulation(
-                puissance, request.id, df_ENEDIS, constantes_ENEDIS, request.annee, 
-                request.prix_achat, request.type_centrale,
-                request.localisation, request.montant_pret, request.taux_pret, request.duree_pret
+                puissance=puissance, 
+                df_ENEDIS=df_ENEDIS, 
+                constantes_ENEDIS=constantes_ENEDIS, 
+                prix_achat=request.prix_achat, 
+                type_centrale=request.type_centrale,
+                localisation=request.localisation, 
+                montant_pret_bancaire=request.montant_pret, 
+                taux_pret_bancaire=request.taux_pret, 
+                duree_pret_bancaire=request.duree_pret
             )
             points_simu.append(result)
-        scenarios = calculate_scenarios(points_simu, 500, 1000) #TODO
-        results_store[request_id] = {"status": "Completed", "results": {"points_simu":points_simu,"scenarios":scenarios}}
+            logger.info(f"Simulation result for power {puissance}: {result}")
+        logger.info("All simulations completed")
+        scenarios = calculate_scenarios(
+            data = points_simu, 
+            conso_totale = constantes_ENEDIS['total_consumption'], 
+            )
+        logger.info(f"Scenarios calculated: {scenarios}")
+        results_store[request.id] = {"status": "Completed", "results": {"points_simu":points_simu,"scenarios":scenarios}}
 
     except Exception as e:
         logger.error(f"Error in calculate_simulation_task: {str(e)}")
-        results_store[request_id] = {"status": "Error", "error": str(e)}
+        results_store[request.id] = {"status": "Error", "error": str(e)}
     finally:
         os.remove(file_path)  # Clean up the uploaded file after processing
         logger.info(f"File {file_path} removed after processing")
@@ -79,12 +89,11 @@ async def calc_simulation(
     id: int = Form(...),
     prix_achat: int = Form(...),
     type_centrale: str = Form(...),
+    localisation: int = Form(...),
+    surface: float = Form(...),
     montant_pret: Optional[int] = Form(...),
     taux_pret: Optional[float] = Form(...),
     duree_pret: Optional[int] = Form(...),
-    localisation: str = Form(...),
-    annee: int = Form(...),
-    puissances: str = Form(...),  # Expecting a JSON string
 ):
     """
     Endpoint to calculate simulation based on provided parameters and uploaded file.
@@ -96,29 +105,23 @@ async def calc_simulation(
         f.write(file.file.read())
 
     try:
-        logger.info("Received raw puissances: %s", puissances)
-        
-        # Convert puissances JSON string to list
-        puissances_list = json.loads(puissances)
-        logger.info("Parsed puissances: %s", puissances_list)
 
         # Construct SimulationRequest object
         simulation_request = SimulationRequest(
             id=id,
             prix_achat=prix_achat,
             type_centrale=type_centrale,
+            localisation=localisation,
+            surface=surface,
             montant_pret=montant_pret,
             taux_pret=taux_pret,
             duree_pret=duree_pret,
-            localisation=localisation,
-            annee=annee,
-            puissances=puissances_list,
         )
 
         logger.info(f"Received simulation request: {jsonable_encoder(simulation_request)}")
 
         # Add the simulation task to background tasks
-        background_tasks.add_task(calculate_simulation_task, simulation_request.id, simulation_request, file_location)
+        background_tasks.add_task(calculate_simulation_task, simulation_request, file_location)
 
         return {"status": "Processing", "request_id": simulation_request.id}
 
