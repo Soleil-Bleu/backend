@@ -8,6 +8,13 @@ from calculs import simulation, choisir_puissance, import_data, calculate_scenar
 from fastapi.encoders import jsonable_encoder
 import json
 
+# Import Supabase client
+from supabase import create_client, Client
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +35,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize Supabase client
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
+
 class SimulationRequest(BaseModel):
     id: int
     prix_achat: int = Field(..., gt=0, description="The purchase price must be positive")
@@ -38,18 +50,17 @@ class SimulationRequest(BaseModel):
     taux_pret: Optional[float] = Field(0, ge=0, le=100, description="The loan interest rate must be between 0 and 100")
     duree_pret: Optional[int] = Field(0, ge=0, description="The loan duration in years must be positive")
 
-results_store = {}
-
 def calculate_simulation_task(request: SimulationRequest, file_path: str):
     """
     Function to perform the long-running simulation task.
     """
     try:
         logger.info(f"Starting calculation task for request ID {request.id}")
-        results_store[request.id] = {"status": "Processing"}
+
+        # Update the status to 'Processing'
+        supabase.table("simulations").update({"status": "Processing"}).eq("form_id", request.id).execute()
 
         puissances = choisir_puissance(request.surface)
-
         df_ENEDIS, constantes_ENEDIS = import_data(file_path)
 
         points_simu = []
@@ -67,20 +78,69 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
             )
             points_simu.append(result)
             logger.info(f"Simulation result for power {puissance}: {result}")
+        
         logger.info("All simulations completed")
+
         scenarios = calculate_scenarios(
-            data = points_simu, 
-            conso_totale = constantes_ENEDIS['total_consumption'], 
-            )
+            data=points_simu, 
+            conso_totale=constantes_ENEDIS['total_consumption'], 
+        )
+
         logger.info(f"Scenarios calculated: {scenarios}")
-        results_store[request.id] = {"status": "Completed", "results": {"points_simu":points_simu,"scenarios":scenarios}}
+
+        # Update the status to 'Completed' and save the results
+        supabase.table("simulations").update({
+            "status": "Completed",
+            "results": {"points_simu": points_simu, "scenarios": scenarios}
+        }).eq("form_id", request.id).execute()
 
     except Exception as e:
         logger.error(f"Error in calculate_simulation_task: {str(e)}")
-        results_store[request.id] = {"status": "Error", "error": str(e)}
+        # Update the status to 'Error' and save the error message
+        supabase.table("simulations").update({
+            "status": "Error",
+            "results": {"error": str(e)}
+        }).eq("form_id", request.id).execute()
     finally:
         os.remove(file_path)  # Clean up the uploaded file after processing
-        logger.info(f"File {file_path} removed after processing")
+        logger.info(f"File {request.id} removed after processing")
+
+def upload_file_and_insert_data_task(file_path: str, simulation_request: SimulationRequest):
+    """
+    Function to upload the file to Supabase storage and insert data into the database.
+    """
+    try:
+        # Upload the file to Supabase storage
+        with open(file_path, "rb") as f:
+            res = supabase.storage.from_("Enedis").upload(file=f, path=str(simulation_request.id), file_options={"content-type": "text/csv"})
+        
+        # Insert the data into the database
+        insert_data = {
+            "form_id": simulation_request.id,
+            "prix_achat": simulation_request.prix_achat,
+            "type_centrale": simulation_request.type_centrale,
+            "localisation": simulation_request.localisation,
+            "surface": simulation_request.surface,
+            "montant_pret": simulation_request.montant_pret,
+            "taux_pret": simulation_request.taux_pret,
+            "duree_pret": simulation_request.duree_pret,
+            "file_path": str(simulation_request.id),
+            "status": "Received",
+            "results": {}
+        }
+        supabase.table("simulations").insert(insert_data).execute()
+        logger.info(f"Data inserted into database for request ID {simulation_request.id}")
+
+        # Add the simulation task to background tasks
+        calculate_simulation_task(simulation_request, file_path)
+
+    except Exception as e:
+        logger.error(f"Error in upload_file_and_insert_data_task: {str(e)}")
+        # Update the status to 'Error' and save the error message
+        supabase.table("simulations").update({
+            "status": "Error",
+            "results": {"error": str(e)}
+        }).eq("form_id", simulation_request.id).execute()
 
 @app.post("/calc_simulation", response_model=dict)
 async def calc_simulation(
@@ -100,12 +160,11 @@ async def calc_simulation(
     """
     os.makedirs("files", exist_ok=True)  # Ensure the directory exists
 
-    file_location = f"files/{file.filename}"
+    file_location = os.path.join("files",f"{id}.csv")
     with open(file_location, "wb") as f:
         f.write(file.file.read())
 
     try:
-
         # Construct SimulationRequest object
         simulation_request = SimulationRequest(
             id=id,
@@ -120,8 +179,8 @@ async def calc_simulation(
 
         logger.info(f"Received simulation request: {jsonable_encoder(simulation_request)}")
 
-        # Add the simulation task to background tasks
-        background_tasks.add_task(calculate_simulation_task, simulation_request, file_location)
+        # Add the upload file and insert data task to background tasks
+        background_tasks.add_task(upload_file_and_insert_data_task, file_location, simulation_request)
 
         return {"status": "Processing", "request_id": simulation_request.id}
 
@@ -135,15 +194,24 @@ async def calc_simulation(
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail={"unexpected_error": str(e)})
 
+
 @app.get("/simulation_result/{request_id}", response_model=dict)
 async def get_simulation_result(request_id: int):
     """
     Endpoint to retrieve the results of a simulation.
     """
-    result = results_store.get(request_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Result not found")
-    return result
+    try:
+        data, count = supabase.table("simulations").select("*").eq("form_id", request_id).limit(1).execute()
+        print(data)
+        if not len(data[1]):
+            # raise HTTPException(status_code=404, detail="Result not found")
+            return {"status": "Not found", "results": {}}
+        status = data[1][0].get("status", None)
+        results = data[1][0].get("results", {})
+        return {"status": status, "results": results}
+    except Exception as e:
+        logger.error(f"Error retrieving simulation result: {str(e)}")
+        raise HTTPException(status_code=500, detail={"unexpected_error": str(e)})
 
 if __name__ == "__main__":
     import uvicorn

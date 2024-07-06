@@ -3,3 +3,4 @@ fastapi
 pyairtable
 pandas
 httpx
+supabase
