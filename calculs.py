@@ -96,14 +96,62 @@ def import_data(file_path):
 def choisir_puissance(surface_max):
     try:
         puissance_max = math.floor(surface_max / 5)
-        step = puissance_max  / 13
-        puissances = [int(step * i) for i in range(1, 13)]
+        step = puissance_max  / 30
+        puissances = [int(step * i) for i in range(1, 31)]
         logging.info(f"Puissances considérées : {puissances}")
         return puissances
     except Exception as e:
         logging.error(f"Erreur dans choisir_puissance: {str(e)}")
         raise
+# Représentation du tableau d'efficacité
+tableau_efficacite = {
+    'est': {0: 88, 15: 87, 25: 85, 35: 83, 50: 77, 70: 65, 90: 50},
+    'sud-est': {0: 88, 15: 93, 25: 95, 35: 95, 50: 92, 70: 81, 90: 64},
+    'sud': {0: 88, 15: 96, 25: 99, 35: 100, 50: 98, 70: 87, 90: 68},
+    'sud-ouest': {0: 88, 15: 93, 25: 95, 35: 95, 50: 92, 70: 81, 90: 64},
+    'ouest': {0: 88, 15: 87, 25: 85, 35: 82, 50: 76, 70: 65, 90: 50},
+}
+"""
+def interpolation_efficacite(orientation, inclinaison):
+    orientations = ['est', 'sud-est', 'sud', 'sud-ouest', 'ouest']
+    inclinaisons = [0, 15, 25, 35, 50, 70, 90]
 
+    # Trouver les orientations les plus proches dans le tableau
+    valeurs_orientation = np.array([0, 45, 90, 135, 180])  # Degrés pour est, sud-est, sud, sud-ouest, ouest
+    orientation_deg = {'est': 0, 'sud-est': 45, 'sud': 90, 'sud-ouest': 135, 'ouest': 180}
+    cles_orientation = list(orientation_deg.keys())
+    
+    index_orientation = np.searchsorted(valeurs_orientation, orientation)
+    if index_orientation == 0:
+        orientation_basse = cles_orientation[0]
+        orientation_haute = cles_orientation[1]
+    elif index_orientation == len(valeurs_orientation):
+        orientation_basse = cles_orientation[-2]
+        orientation_haute = cles_orientation[-1]
+    else:
+        orientation_basse = cles_orientation[index_orientation - 1]
+        orientation_haute = cles_orientation[index_orientation]
+    
+    # Trouver les inclinaisons les plus proches dans le tableau
+    inclinaison_basse = max([i for i in inclinaisons if i <= inclinaison])
+    inclinaison_haute = min([i for i in inclinaisons if i >= inclinaison])
+    
+    if inclinaison_basse == inclinaison_haute:
+        eff_basse_orient = tableau_efficacite[orientation_basse][inclinaison_basse]
+        eff_haute_orient = tableau_efficacite[orientation_haute][inclinaison_basse]
+        efficacite = np.interp(orientation, [orientation_deg[orientation_basse], orientation_deg[orientation_haute]], [eff_basse_orient, eff_haute_orient])
+    else:
+        eff_basse_basse = tableau_efficacite[orientation_basse][inclinaison_basse]
+        eff_basse_haute = tableau_efficacite[orientation_basse][inclinaison_haute]
+        eff_haute_basse = tableau_efficacite[orientation_haute][inclinaison_basse]
+        eff_haute_haute = tableau_efficacite[orientation_haute][inclinaison_haute]
+        
+        eff_basse = np.interp(inclinaison, [inclinaison_basse, inclinaison_haute], [eff_basse_basse, eff_basse_haute])
+        eff_haute = np.interp(inclinaison, [inclinaison_basse, inclinaison_haute], [eff_haute_basse, eff_haute_haute])
+        efficacite = np.interp(orientation, [orientation_deg[orientation_basse], orientation_deg[orientation_haute]], [eff_basse, eff_haute])
+    
+    return efficacite / 100
+"""
 def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
     try:
         total_consumption = constantes_ENEDIS['total_consumption']
@@ -112,19 +160,19 @@ def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_central
 
         df = df_ENEDIS.copy(deep=True)
 
-        # Define the sale price based on power
+        # Define the sale price based on power sites qui publient les données https://terresolaire.com/Blog/rentabilite-photovoltaique/tarif-rachat-photovoltaique/ ; https://soleriel.fr/guide-solaire/aide-photovoltaique/tarifs-achat-photovoltaique/
         prix_vente = (
-            133.9 if puissance <= 36 else
-            80.3 if puissance <= 99.9 else
-            131.2
+            130.1 if puissance <= 36 else
+            78.1 if puissance <= 99.9 else
+            114.1
         )
 
         # Installation prime in €/kWc installed
         prime_installation = (
-            510 if puissance <= 3 else
-            380 if puissance <= 9 else
-            210 if puissance <= 36 else
-            110 if puissance <= 100 else
+            300 if puissance <= 3 else
+            230 if puissance <= 9 else
+            200 if puissance <= 36 else
+            100 if puissance <= 100 else
             0
         )
     
