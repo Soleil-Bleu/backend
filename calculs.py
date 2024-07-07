@@ -180,7 +180,7 @@ def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_central
         # Calculate maintenance cost per year, annual profits, amortization and 20-year balance
         cout_maintenance = puissance * prix_onduleur + nettoyage
         benefices_an_brut = (
-            productible * puissance * prix_achat*100 * taux_AC + 
+            productible * puissance * prix_achat*10 * taux_AC + 
             productible * puissance * prix_vente * (1 - taux_AC) - 
             cout_maintenance
         )
