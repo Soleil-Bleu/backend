@@ -237,9 +237,13 @@ def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_central
             montant_pret_bancaire * taux_pret_bancaire
         )
         amortissement = cout_installation / benefices_an_pret if benefices_an_pret != 0 else float('inf')
+        baisse_facture = benefices_an_pret/(total_consumption*prix_achat)
         bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
         return {
             "puissance": puissance,
+            "cout_installation": round(cout_installation, 3 - int(math.floor(math.log10(abs(cout_installation)))) - 1),
+            "surface": puissance*5,
+            "baisse_facture": round(baisse_facture * 100, 1),
             "amortissement": round(amortissement, 3 - int(math.floor(math.log10(abs(amortissement)))) - 1),
             "autoconso": round(taux_AC * 100, 1),
             "autoprod": round(taux_AP * 100, 1),
