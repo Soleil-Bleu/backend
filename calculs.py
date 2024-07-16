@@ -3,6 +3,7 @@ import math
 import logging
 from numerize import numerize
 import datetime
+import numpy as np
 
 # Constants
 IRRADIATION_URL = "https://raw.githubusercontent.com/Smehlish/excel_to_python/main/Irradiation.csv"
@@ -13,7 +14,7 @@ COLUMNS_TO_DROP = [
 ]
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def import_data(file_path):
     try:
@@ -103,7 +104,10 @@ def choisir_puissance(surface_max):
     except Exception as e:
         logging.error(f"Erreur dans choisir_puissance: {str(e)}")
         raise
+
+
 # Représentation du tableau d'efficacité
+"""
 tableau_efficacite = {
     'est': {0: 88, 15: 87, 25: 85, 35: 83, 50: 77, 70: 65, 90: 50},
     'sud-est': {0: 88, 15: 93, 25: 95, 35: 95, 50: 92, 70: 81, 90: 64},
@@ -112,47 +116,50 @@ tableau_efficacite = {
     'ouest': {0: 88, 15: 87, 25: 85, 35: 82, 50: 76, 70: 65, 90: 50},
 }
 """
-def interpolation_efficacite(orientation, inclinaison):
-    orientations = ['est', 'sud-est', 'sud', 'sud-ouest', 'ouest']
-    inclinaisons = [0, 15, 25, 35, 50, 70, 90]
 
-    # Trouver les orientations les plus proches dans le tableau
-    valeurs_orientation = np.array([0, 45, 90, 135, 180])  # Degrés pour est, sud-est, sud, sud-ouest, ouest
-    orientation_deg = {'est': 0, 'sud-est': 45, 'sud': 90, 'sud-ouest': 135, 'ouest': 180}
-    cles_orientation = list(orientation_deg.keys())
-    
-    index_orientation = np.searchsorted(valeurs_orientation, orientation)
-    if index_orientation == 0:
-        orientation_basse = cles_orientation[0]
-        orientation_haute = cles_orientation[1]
-    elif index_orientation == len(valeurs_orientation):
-        orientation_basse = cles_orientation[-2]
-        orientation_haute = cles_orientation[-1]
-    else:
-        orientation_basse = cles_orientation[index_orientation - 1]
-        orientation_haute = cles_orientation[index_orientation]
-    
-    # Trouver les inclinaisons les plus proches dans le tableau
-    inclinaison_basse = max([i for i in inclinaisons if i <= inclinaison])
-    inclinaison_haute = min([i for i in inclinaisons if i >= inclinaison])
-    
-    if inclinaison_basse == inclinaison_haute:
-        eff_basse_orient = tableau_efficacite[orientation_basse][inclinaison_basse]
-        eff_haute_orient = tableau_efficacite[orientation_haute][inclinaison_basse]
-        efficacite = np.interp(orientation, [orientation_deg[orientation_basse], orientation_deg[orientation_haute]], [eff_basse_orient, eff_haute_orient])
-    else:
-        eff_basse_basse = tableau_efficacite[orientation_basse][inclinaison_basse]
-        eff_basse_haute = tableau_efficacite[orientation_basse][inclinaison_haute]
-        eff_haute_basse = tableau_efficacite[orientation_haute][inclinaison_basse]
-        eff_haute_haute = tableau_efficacite[orientation_haute][inclinaison_haute]
-        
-        eff_basse = np.interp(inclinaison, [inclinaison_basse, inclinaison_haute], [eff_basse_basse, eff_basse_haute])
-        eff_haute = np.interp(inclinaison, [inclinaison_basse, inclinaison_haute], [eff_haute_basse, eff_haute_haute])
-        efficacite = np.interp(orientation, [orientation_deg[orientation_basse], orientation_deg[orientation_haute]], [eff_basse, eff_haute])
-    
-    return efficacite / 100
-"""
-def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_centrale, localisation, montant_pret_bancaire, taux_pret_bancaire, duree_pret_bancaire) -> dict:
+def efficiency_modelization(orientation, inclination):
+    orientation = orientation % 360
+    if orientation > 180:
+        orientation = 360 - orientation  # symmetrie
+
+    intercept = 67.31
+    coefs = {
+        'x0': 0.2523,
+        'x1': -0.3414,
+        'x0^2': -0.000623,
+        'x0 x1': 0.008771,
+        'x1^2': -0.007267,
+        'x0^3': -2.613e-07,
+        'x0^2 x1': -2.48e-05,
+        'x0 x1^2': 1.695e-06,
+        'x1^3': -3.317e-06
+    }
+
+    efficiency = (intercept +
+                  coefs['x0'] * orientation +
+                  coefs['x1'] * inclination +
+                  coefs['x0^2'] * orientation**2 +
+                  coefs['x0 x1'] * orientation * inclination +
+                  coefs['x1^2'] * inclination**2 +
+                  coefs['x0^3'] * orientation**3 +
+                  coefs['x0^2 x1'] * orientation**2 * inclination +
+                  coefs['x0 x1^2'] * orientation * inclination**2 +
+                  coefs['x1^3'] * inclination**3)
+
+    return efficiency
+
+def simulation(
+        puissance, 
+        df_ENEDIS, 
+        constantes_ENEDIS, 
+        prix_achat, 
+        type_centrale, 
+        localisation,
+        orientation,
+        inclinaison, 
+        montant_pret_bancaire, 
+        taux_pret_bancaire, 
+        duree_pret_bancaire) -> dict:
     try:
         total_consumption = constantes_ENEDIS['total_consumption']
         production_unitaire = constantes_ENEDIS['production_unitaire']
@@ -186,7 +193,7 @@ def simulation(puissance, df_ENEDIS, constantes_ENEDIS, prix_achat, type_central
         productible = 1.23 # MWh generated for each kWc installed per year
 
         # Calculate consumption, production and surplus energy in MWh
-        tot_production = production_unitaire * puissance
+        tot_production = production_unitaire * puissance * efficiency_modelization(orientation, inclinaison)
         tot_energie_surplus = df['energie_surplus'].sum() / 1000
 
         # Log the relevant variables
@@ -293,4 +300,3 @@ def calculate_scenarios(data, conso_totale):
     scenarios['rentable'] = rentable['puissance']
     
     return scenarios
-

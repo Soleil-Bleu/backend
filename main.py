@@ -46,6 +46,8 @@ class SimulationRequest(BaseModel):
     type_centrale: str = Field(..., description="The type of power plant")
     localisation: int = Field(..., description="The location of the installation")
     surface: float = Field(..., gt=0, description="The surface area of the installation must be positive")
+    orientation: float = Field(..., gt=0, description="The orientation of the installation")
+    inclinaison: float = Field(..., gt=0, description="The inclination of the installation")
     montant_pret: Optional[int] = Field(0, ge=0, description="The loan amount must be positive")
     taux_pret: Optional[float] = Field(0, ge=0, le=100, description="The loan interest rate must be between 0 and 100")
     duree_pret: Optional[int] = Field(0, ge=0, description="The loan duration in years must be positive")
@@ -71,7 +73,9 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
                 constantes_ENEDIS=constantes_ENEDIS, 
                 prix_achat=request.prix_achat, 
                 type_centrale=request.type_centrale,
-                localisation=request.localisation, 
+                localisation=request.localisation,
+                orientation=request.orientation,
+                inclinaison=request.inclinaison,
                 montant_pret_bancaire=request.montant_pret, 
                 taux_pret_bancaire=request.taux_pret, 
                 duree_pret_bancaire=request.duree_pret
@@ -121,6 +125,8 @@ def upload_file_and_insert_data_task(file_path: str, simulation_request: Simulat
             "type_centrale": simulation_request.type_centrale,
             "localisation": simulation_request.localisation,
             "surface": simulation_request.surface,
+            "orientation": simulation_request.orientation,
+            "inclinaison": simulation_request.inclinaison,
             "montant_pret": simulation_request.montant_pret,
             "taux_pret": simulation_request.taux_pret,
             "duree_pret": simulation_request.duree_pret,
@@ -151,6 +157,8 @@ async def calc_simulation(
     type_centrale: str = Form(...),
     localisation: int = Form(...),
     surface: float = Form(...),
+    orientation: float = Form(...),
+    inclinaison: float = Form(...),
     montant_pret: Optional[int] = Form(...),
     taux_pret: Optional[float] = Form(...),
     duree_pret: Optional[int] = Form(...),
@@ -172,6 +180,8 @@ async def calc_simulation(
             type_centrale=type_centrale,
             localisation=localisation,
             surface=surface,
+            orientation=orientation,
+            inclinaison=inclinaison,
             montant_pret=montant_pret,
             taux_pret=taux_pret,
             duree_pret=duree_pret,
