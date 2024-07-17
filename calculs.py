@@ -146,7 +146,7 @@ def efficiency_modelization(orientation, inclination):
                   coefs['x0 x1^2'] * orientation * inclination**2 +
                   coefs['x1^3'] * inclination**3)
 
-    return efficiency
+    return efficiency/100
 
 def simulation(
         puissance, 

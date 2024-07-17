@@ -99,7 +99,7 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
         }).eq("form_id", request.id).execute()
 
     except Exception as e:
-        logger.error(f"Error in calculate_simulation_task: {str(e)}")
+        logger.error(f"Error in calculate_simulation_task !", exc_info=True)
         # Update the status to 'Error' and save the error message
         supabase.table("simulations").update({
             "status": "Error",
