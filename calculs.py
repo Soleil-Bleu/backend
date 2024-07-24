@@ -16,7 +16,21 @@ COLUMNS_TO_DROP = [
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def import_data(file_path, orientation, inclinaison):
+
+def get_coef_by_postal_code(postal_code):
+    df_loc = pd.read_csv('ensoleillement.csv', delimiter=';', encoding='latin1')
+    df_loc['Coef'] = df_loc['Coef'].str.replace(',', '.').astype(float)
+    postal_code = str(postal_code)[:2]
+
+    coef = df_loc.loc[df_loc['Num dép'] == postal_code, 'Coef']
+    print(df_loc.loc[df_loc['Num dép'] == postal_code, 'Nom'])
+    if not coef.empty:
+        return coef.values[0]
+    else:
+        return 1
+
+
+def import_data(file_path, localisation, orientation, inclinaison):
     try:
         df = pd.read_csv(file_path, sep=';', encoding='ISO-8859-1', dtype='unicode')
         df_irrad = pd.read_csv(IRRADIATION_URL, sep=';', encoding='ISO-8859-1', dtype='unicode')
@@ -81,8 +95,7 @@ def import_data(file_path, orientation, inclinaison):
         total_consumption = df['Valeur'].sum() / (60000 / constants['pas_en_minutes'])
 
         # Calculate theoretical production and unit production
-    
-        efficacite_lumineuse = {'basse': 0.005, 'haute': 0.21* efficiency_modelization(orientation, inclinaison)}
+        efficacite_lumineuse = {'basse': 0.005, 'haute': 0.21* efficiency_modelization(orientation, inclinaison) * get_coef_by_postal_code(localisation)}
         ratio_surface_puissance = 222
         df['production_theorique'] = df.apply(
             lambda row: (efficacite_lumineuse['basse'] if row['Irradiation'] < 5 else efficacite_lumineuse['haute']) * row['Irradiation'] / ratio_surface_puissance, axis=1

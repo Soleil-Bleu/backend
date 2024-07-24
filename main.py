@@ -65,9 +65,10 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
         puissances = choisir_puissance(request.surface)
         df_ENEDIS, constantes_ENEDIS = import_data(
                 file_path, 
+                localisation=request.localisation,
                 orientation=request.orientation, 
                 inclinaison=request.inclinaison,
-                localisation=request.localisation,
+                
             )
 
         points_simu = []
