@@ -16,7 +16,7 @@ COLUMNS_TO_DROP = [
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def import_data(file_path):
+def import_data(file_path, orientation, inclinaison):
     try:
         df = pd.read_csv(file_path, sep=';', encoding='ISO-8859-1', dtype='unicode')
         df_irrad = pd.read_csv(IRRADIATION_URL, sep=';', encoding='ISO-8859-1', dtype='unicode')
@@ -81,7 +81,8 @@ def import_data(file_path):
         total_consumption = df['Valeur'].sum() / (60000 / constants['pas_en_minutes'])
 
         # Calculate theoretical production and unit production
-        efficacite_lumineuse = {'basse': 0.005, 'haute': 0.21}
+    
+        efficacite_lumineuse = {'basse': 0.005, 'haute': 0.21* efficiency_modelization(orientation, inclinaison)}
         ratio_surface_puissance = 222
         df['production_theorique'] = df.apply(
             lambda row: (efficacite_lumineuse['basse'] if row['Irradiation'] < 5 else efficacite_lumineuse['haute']) * row['Irradiation'] / ratio_surface_puissance, axis=1
@@ -153,10 +154,7 @@ def simulation(
         df_ENEDIS, 
         constantes_ENEDIS, 
         prix_achat, 
-        type_centrale, 
-        localisation,
-        orientation,
-        inclinaison, 
+        type_centrale,
         montant_pret_bancaire, 
         taux_pret_bancaire, 
         duree_pret_bancaire) -> dict:
@@ -193,7 +191,7 @@ def simulation(
         productible = 1.23 # MWh generated for each kWc installed per year
 
         # Calculate consumption, production and surplus energy in MWh
-        tot_production = production_unitaire * puissance * efficiency_modelization(orientation, inclinaison)
+        tot_production = production_unitaire * puissance
         tot_energie_surplus = df['energie_surplus'].sum() / 1000
 
         # Log the relevant variables
@@ -235,16 +233,18 @@ def simulation(
         # Calculate maintenance cost per year, annual profits, amortization and 20-year balance
         cout_maintenance = puissance * prix_onduleur + nettoyage
         benefices_an_brut = (
-            productible * puissance * prix_achat*10 * taux_AC + 
-            productible * puissance * prix_vente * (1 - taux_AC) - 
+            tot_production * prix_achat*10 * taux_AC + 
+            tot_production * prix_vente * (1 - taux_AC) - 
             cout_maintenance
         )
+        
         benefices_an_pret = (
             benefices_an_brut - 
             montant_pret_bancaire * taux_pret_bancaire
         )
         amortissement = cout_installation / benefices_an_pret if benefices_an_pret != 0 else float('inf')
-        baisse_facture = benefices_an_pret/(total_consumption*prix_achat)
+        baisse_facture = benefices_an_pret/(total_consumption*1000*prix_achat/100) # on passe la conso en kWh et le prix en euros
+       
         bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
         return {
             "puissance": puissance,

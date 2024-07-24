@@ -63,7 +63,12 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
         supabase.table("simulations").update({"status": "Processing"}).eq("form_id", request.id).execute()
 
         puissances = choisir_puissance(request.surface)
-        df_ENEDIS, constantes_ENEDIS = import_data(file_path)
+        df_ENEDIS, constantes_ENEDIS = import_data(
+                file_path, 
+                orientation=request.orientation, 
+                inclinaison=request.inclinaison,
+                localisation=request.localisation,
+            )
 
         points_simu = []
         for puissance in puissances:
@@ -73,9 +78,6 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
                 constantes_ENEDIS=constantes_ENEDIS, 
                 prix_achat=request.prix_achat, 
                 type_centrale=request.type_centrale,
-                localisation=request.localisation,
-                orientation=request.orientation,
-                inclinaison=request.inclinaison,
                 montant_pret_bancaire=request.montant_pret, 
                 taux_pret_bancaire=request.taux_pret, 
                 duree_pret_bancaire=request.duree_pret
@@ -212,7 +214,6 @@ async def get_simulation_result(request_id: int):
     """
     try:
         data, count = supabase.table("simulations").select("*").eq("form_id", request_id).limit(1).execute()
-        print(data)
         if not len(data[1]):
             # raise HTTPException(status_code=404, detail="Result not found")
             return {"status": "Not found", "results": {}}
