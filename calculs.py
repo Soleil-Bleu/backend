@@ -1,8 +1,6 @@
 import pandas as pd
 import math
 import logging
-from numerize import numerize
-import datetime
 import numpy as np
 
 # Constants
@@ -20,13 +18,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def get_coef_by_postal_code(postal_code):
     df_loc = pd.read_csv('ensoleillement.csv', delimiter=';', encoding='latin1')
     df_loc['Coef'] = df_loc['Coef'].str.replace(',', '.').astype(float)
+    df_loc['Num_dep'] = df_loc['Num_dep'].astype(str)
     postal_code = str(postal_code)[:2]
 
-    coef = df_loc.loc[df_loc['Num dép'] == postal_code, 'Coef']
-    print(df_loc.loc[df_loc['Num dép'] == postal_code, 'Nom'])
+    coef = df_loc.loc[df_loc['Num_dep'] == postal_code, 'Coef']
+    
     if not coef.empty:
+        print(postal_code, df_loc.loc[df_loc['Num_dep'] == postal_code, 'Nom'].values[0])
         return coef.values[0]
     else:
+        logging.error("Erreur avec la localisation :", postal_code)
         return 1
 
 
@@ -111,8 +112,7 @@ def import_data(file_path, localisation, orientation, inclinaison):
 def choisir_puissance(surface_max):
     try:
         puissance_max = math.floor(surface_max / 5)
-        step = puissance_max  / 30
-        puissances = [int(step * i) for i in range(1, 31)]
+        puissances = list(set([int(i) for i in np.linspace(3, puissance_max, num=30)]))
         logging.info(f"Puissances considérées : {puissances}")
         return puissances
     except Exception as e:

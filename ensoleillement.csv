@@ -1,16 +1,15 @@
-Num d�p;Nom;Ensoleillement (heures);Coef
+Num_dep;Nom;Ensoleillement (heures);Coef
 13;Bouches-du-Rh�ne;2801;1,66
 83;Var;2793;1,65
 84;Vaucluse;2753;1,63
-2A;Corse-du-Sud;2726;1,61
-6;Alpes-Maritimes;2668;1,58
+06;Alpes-Maritimes;2668;1,58
 34;H�rault;2618;1,55
 30;Gard;2616;1,55
-4;Alpes-de-Haute-Provence;2596;1,54
-2B;Haute-Corse;2533;1,5
-5;Hautes-Alpes;2439;1,44
+04;Alpes-de-Haute-Provence;2596;1,54
+20;Corse;2533;1,5
+05;Hautes-Alpes;2439;1,44
 66;Pyr�n�es-Orientales;2392;1,42
-7;Ard�che;2390;1,41
+07;Ard�che;2390;1,41
 26;Dr�me;2354;1,39
 82;Tarn-et-Garonne;2143;1,27
 81;Tarn;2134;1,26
@@ -33,9 +32,9 @@ Num d�p;Nom;Ensoleillement (heures);Coef
 65;Hautes-Pyr�n�es;1940;1,15
 79;Deux-S�vres;1934;1,14
 69;Rh�ne;1932;1,14
-1;Ain;1928;1,14
+01;Ain;1928;1,14
 74;Haute-Savoie;1901;1,12
-9;Ari�ge;1900;1,12
+09;Ari�ge;1900;1,12
 63;Puy-de-D�me;1898;1,12
 39;Jura;1889;1,12
 43;Haute-Loire;1885;1,12
@@ -43,7 +42,7 @@ Num d�p;Nom;Ensoleillement (heures);Coef
 86;Vienne;1867;1,1
 91;Essonne;1866;1,1
 87;Haute-Vienne;1860;1,1
-3;Allier;1857;1,1
+03;Allier;1857;1,1
 40;Landes;1852;1,1
 71;Sa�ne-et-Loire;1849;1,09
 36;Indre;1835;1,09
@@ -88,10 +87,10 @@ Num d�p;Nom;Ensoleillement (heures);Coef
 60;Oise;1622;0,96
 59;Nord;1617;0,96
 61;Orne;1615;0,96
-2;Aisne;1609;0,95
+02;Aisne;1609;0,95
 57;Moselle;1605;0,95
 76;Seine-Maritime;1518;0,9
 22;C�tes-d�Armor;1512;0,89
 29;Finist�re;1492;0,88
 50;Manche;1460;0,86
-8;Ardennes;1440;0,85
+08;Ardennes;1440;0,85
