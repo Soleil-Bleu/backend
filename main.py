@@ -108,18 +108,12 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
             "status": "Error",
             "results": {"error": str(e)}
         }).eq("form_id", request.id).execute()
-    finally:
-        os.remove(file_path)  # Clean up the uploaded file after processing
-        logger.info(f"File {request.id} removed after processing")
 
 def upload_file_and_insert_data_task(file_path: str, simulation_request: SimulationRequest):
     """
     Function to upload the file to Supabase storage and insert data into the database.
     """
     try:
-        # Upload the file to Supabase storage
-        with open(file_path, "rb") as f:
-            res = supabase.storage.from_("Enedis").upload(file=f, path=str(simulation_request.id), file_options={"content-type": "text/csv"})
         
         # Insert the data into the database
         insert_data = {
@@ -140,9 +134,13 @@ def upload_file_and_insert_data_task(file_path: str, simulation_request: Simulat
         supabase.table("simulations").insert(insert_data).execute()
         logger.info(f"Data inserted into database for request ID {simulation_request.id}")
 
+        # Upload the file to Supabase storage
+        with open(file_path, "rb") as f:
+            res = supabase.storage.from_("Enedis").upload(file=f, path=str(simulation_request.id), file_options={"content-type": "text/csv"})
+
         # Add the simulation task to background tasks
         calculate_simulation_task(simulation_request, file_path)
-
+        
     except Exception as e:
         logger.error(f"Error in upload_file_and_insert_data_task: {str(e)}")
         # Update the status to 'Error' and save the error message
@@ -150,6 +148,10 @@ def upload_file_and_insert_data_task(file_path: str, simulation_request: Simulat
             "status": "Error",
             "results": {"error": str(e)}
         }).eq("form_id", simulation_request.id).execute()
+    
+    finally:
+        os.remove(file_path)  # Clean up the uploaded file after processing
+        logger.info(f"File {simulation_request.id} removed after processing")
 
 @app.post("/calc_simulation", response_model=dict)
 async def calc_simulation(
@@ -207,23 +209,6 @@ async def calc_simulation(
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail={"unexpected_error": str(e)})
 
-
-@app.get("/simulation_result/{request_id}", response_model=dict)
-async def get_simulation_result(request_id: int):
-    """
-    Endpoint to retrieve the results of a simulation.
-    """
-    try:
-        data, count = supabase.table("simulations").select("*").eq("form_id", request_id).limit(1).execute()
-        if not len(data[1]):
-            # raise HTTPException(status_code=404, detail="Result not found")
-            return {"status": "Not found", "results": {}}
-        status = data[1][0].get("status", None)
-        results = data[1][0].get("results", {})
-        return {"status": status, "results": results}
-    except Exception as e:
-        logger.error(f"Error retrieving simulation result: {str(e)}")
-        raise HTTPException(status_code=500, detail={"unexpected_error": str(e)})
 
 if __name__ == "__main__":
     import uvicorn
