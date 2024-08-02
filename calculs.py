@@ -34,6 +34,15 @@ def get_coef_by_postal_code(postal_code):
 def import_data(file_path, localisation, orientation, inclinaison):
     try:
         df = pd.read_csv(file_path, sep=';', encoding='ISO-8859-1', dtype='unicode')
+        # Normalize date format
+        if '/' in df.iloc[0, 0]:
+            df.iloc[:, 0] = pd.to_datetime(df.iloc[:, 0], format='%d/%m/%Y').dt.strftime('%d-%m-%Y')
+        # Convert dates in header
+        if '/' in df.iloc[0, 6]:
+            df.iloc[0, 6] = pd.to_datetime(df.iloc[:, 6], format='%d/%m/%Y').dt.strftime('%d-%m-%Y')
+        if '/' in df.iloc[0, 7]:
+            df.iloc[0, 7] = pd.to_datetime(df.iloc[:, 7], format='%d/%m/%Y').dt.strftime('%d-%m-%Y')
+        
         df_irrad = pd.read_csv(IRRADIATION_URL, sep=';', encoding='ISO-8859-1', dtype='unicode')
 
         # Extract constants
