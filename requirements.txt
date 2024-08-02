@@ -1,5 +1,5 @@
 numerize
-fastapi
+fastapi[standard]
 pyairtable
 pandas
 httpx
