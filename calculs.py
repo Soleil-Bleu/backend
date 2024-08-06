@@ -193,6 +193,15 @@ def simulation(
             78.1 if puissance <= 99.9 else
             114.1
         )
+        # même site mais en vente totale
+        prix_vente_totale = (
+            143 if puissance <= 3 else
+            121.5 if puissance <= 9 else
+            135.5 if puissance <= 36 else
+            117.8 if puissance <= 100 else
+            114.1 if puissance <= 500 else
+            0
+        )
 
         # Installation prime in €/kWc installed
         prime_installation = (
@@ -247,7 +256,7 @@ def simulation(
         # if not devis_installation: # if quote = 0€ (default)
         courbe = courbe_tendence[type_centrale]
         if puissance <= 100:
-            cout_installation = (courbe['inf_100']['A'] * math.log(puissance) + courbe['inf_100']['B']) * puissance
+            cout_installation = (courbe['inf_100']['A'] * math.log(puissance) + courbe['inf_100']['B']) * puissance - (prime_installation * puissance)
         else:
             cout_installation = (courbe['sup_100']['A'] * puissance + courbe['sup_100']['B']) * puissance
         # else: cout_installation = devis_installation
