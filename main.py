@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, ValidationError
 from calculs import simulation, choisir_puissance, import_data, calculate_scenarios
 from fastapi.encoders import jsonable_encoder
 import json
+import concurrent.futures
 
 # Import Supabase client
 from supabase import create_client, Client
@@ -64,28 +65,27 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
 
         puissances = choisir_puissance(request.surface)
         df_ENEDIS, constantes_ENEDIS = import_data(
-                file_path, 
-                localisation=request.localisation,
-                orientation=request.orientation, 
-                inclinaison=request.inclinaison,
-                
-            )
+            file_path, 
+            localisation=request.localisation,
+            orientation=request.orientation, 
+            inclinaison=request.inclinaison,
+        )
 
-        points_simu = []
-        for puissance in puissances:
-            result = simulation(
-                puissance=puissance, 
-                df_ENEDIS=df_ENEDIS, 
-                constantes_ENEDIS=constantes_ENEDIS, 
-                prix_achat=request.prix_achat, 
-                type_centrale=request.type_centrale,
-                montant_pret_bancaire=request.montant_pret, 
-                taux_pret_bancaire=request.taux_pret, 
-                duree_pret_bancaire=request.duree_pret
-            )
-            points_simu.append(result)
-            logger.info(f"Simulation result for power {puissance}: {result}")
-        
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            futures = {
+                executor.submit(simulation, puissance, df_ENEDIS, constantes_ENEDIS, request.prix_achat, request.type_centrale, request.montant_pret, request.taux_pret, request.duree_pret): puissance
+                for puissance in puissances
+            }
+
+            points_simu = []
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    points_simu.append(result)
+                except Exception as e:
+                    logger.error(f"Simulation failed for power {futures[future]}: {e}")
+
+        points_simu.sort(key=lambda x: x['puissance'])
         logger.info("All simulations completed")
 
         scenarios = calculate_scenarios(
@@ -97,9 +97,10 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
 
         # Update the status to 'Completed' and save the results
         supabase.table("simulations").update({
-            "status": "Completed",
             "results": {"points_simu": points_simu, "scenarios": scenarios}
         }).eq("form_id", request.id).execute()
+
+        supabase.table("simulations").update({"status": "Completed"}).eq("form_id", request.id).execute()
 
     except Exception as e:
         logger.error(f"Error in calculate_simulation_task !", exc_info=True)
@@ -173,7 +174,7 @@ async def calc_simulation(
     """
     os.makedirs("files", exist_ok=True)  # Ensure the directory exists
 
-    file_location = os.path.join("files",f"{id}.csv")
+    file_location = os.path.join("files", f"{id}.csv")
     with open(file_location, "wb") as f:
         f.write(file.file.read())
 

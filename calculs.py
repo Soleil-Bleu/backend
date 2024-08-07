@@ -268,7 +268,7 @@ def simulation(
         baisse_facture = benefices_an_pret/(total_consumption*1000*prix_achat/100) # on passe la conso en kWh et le prix en euros
        
         bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
-        return {
+        result = {
             "puissance": puissance,
             "cout_installation": round(cout_installation, 3 - int(math.floor(math.log10(abs(cout_installation)))) - 1),
             "surface": puissance*5,
@@ -279,6 +279,9 @@ def simulation(
             "bilan_20_ans": round(bilan_20_ans, 3 - int(math.floor(math.log10(abs(bilan_20_ans)))) - 1),
             "tri": 1, # TODO
         }
+        logging.info(f"Simulation result for puissance {puissance}: {result}")
+        return result
+    
     except Exception as e:
         logging.error(f"Error in simulation: {str(e)}")
         return {"error": str(e)}
