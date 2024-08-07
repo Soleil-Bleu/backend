@@ -86,7 +86,7 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
                     logger.error(f"Simulation failed for power {futures[future]}: {e}")
 
         points_simu.sort(key=lambda x: x['puissance'])
-        logger.info("All simulations completed")
+        logger.info("All simulations completed :", points_simu)
 
         scenarios = calculate_scenarios(
             data=points_simu, 
