@@ -71,7 +71,7 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
             inclinaison=request.inclinaison,
         )
 
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        """with concurrent.futures.ProcessPoolExecutor() as executor:
             futures = {
                 executor.submit(simulation, puissance, df_ENEDIS, constantes_ENEDIS, request.prix_achat, request.type_centrale, request.montant_pret, request.taux_pret, request.duree_pret): puissance
                 for puissance in puissances
@@ -83,7 +83,10 @@ def calculate_simulation_task(request: SimulationRequest, file_path: str):
                     result = future.result()
                     points_simu.append(result)
                 except Exception as e:
-                    logger.error(f"Simulation failed for power {futures[future]}: {e}")
+                    logger.error(f"Simulation failed for power {futures[future]}: {e}") """
+        points_simu = []
+        for puissance in puissances:
+            points_simu.append(simulation(puissance, df_ENEDIS, constantes_ENEDIS, request.prix_achat, request.type_centrale, request.montant_pret, request.taux_pret, request.duree_pret))
 
         points_simu.sort(key=lambda x: x['puissance'])
         logger.info("All simulations completed :", points_simu)
