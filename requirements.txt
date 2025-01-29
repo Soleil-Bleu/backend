@@ -1,7 +1,5 @@
 numerize
 fastapi[standard]
-pyairtable
 pandas
 httpx
 supabase
-modal
