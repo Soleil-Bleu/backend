@@ -4,3 +4,4 @@ pyairtable
 pandas
 httpx
 supabase
+modal

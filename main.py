@@ -43,6 +43,7 @@ supabase: Client = create_client(url, key)
 
 class SimulationRequest(BaseModel):
     id: int
+    email: str = Field(..., description="The email of the user")
     prix_achat: int = Field(..., gt=0, description="The purchase price must be positive")
     type_centrale: str = Field(..., description="The type of power plant")
     localisation: int = Field(..., description="The location of the installation")
@@ -122,6 +123,7 @@ def upload_file_and_insert_data_task(file_path: str, simulation_request: Simulat
         # Insert the data into the database
         insert_data = {
             "form_id": simulation_request.id,
+            "email": simulation_request.email,
             "prix_achat": simulation_request.prix_achat,
             "type_centrale": simulation_request.type_centrale,
             "localisation": simulation_request.localisation,
@@ -162,6 +164,7 @@ async def calc_simulation(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     id: int = Form(...),
+    email: str = Form(...),
     prix_achat: int = Form(...),
     type_centrale: str = Form(...),
     localisation: int = Form(...),
@@ -185,6 +188,7 @@ async def calc_simulation(
         # Construct SimulationRequest object
         simulation_request = SimulationRequest(
             id=id,
+            email=email,
             prix_achat=prix_achat,
             type_centrale=type_centrale,
             localisation=localisation,
