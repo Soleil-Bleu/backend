@@ -2,7 +2,6 @@ import pandas as pd
 import math
 import logging
 import numpy as np
-import numpy_financial as npf
 
 # Constants
 IRRADIATION_URL = "https://raw.githubusercontent.com/Smehlish/excel_to_python/main/Irradiation.csv"
