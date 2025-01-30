@@ -217,6 +217,10 @@ async def calc_simulation(
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail={"unexpected_error": str(e)})
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 
 if __name__ == "__main__":
     import uvicorn
