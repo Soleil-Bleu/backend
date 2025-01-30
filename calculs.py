@@ -189,25 +189,25 @@ def simulation(
 
         # Define the sale price based on power sites qui publient les données https://terresolaire.com/Blog/rentabilite-photovoltaique/tarif-rachat-photovoltaique/ ; https://soleriel.fr/guide-solaire/aide-photovoltaique/tarifs-achat-photovoltaique/
         prix_vente = (
-            130.1 if puissance <= 36 else
-            78.1 if puissance <= 99.9 else
-            114.1
+            126.9 if puissance <= 36 else
+            76.1 if puissance <= 99.9 else
+            105.2
         )
         # même site mais en vente totale
         prix_vente_totale = (
-            143 if puissance <= 3 else
-            121.5 if puissance <= 9 else
-            135.5 if puissance <= 36 else
-            117.8 if puissance <= 100 else
-            114.1 if puissance <= 500 else
+            103.1 if puissance <= 3 else
+            87.6 if puissance <= 9 else
+            130.2 if puissance <= 36 else
+            113.2 if puissance <= 100 else
+            105.2 if puissance <= 500 else
             0
         )
 
         # Installation prime in €/kWc installed
         prime_installation = (
-            300 if puissance <= 3 else
-            230 if puissance <= 9 else
-            200 if puissance <= 36 else
+            220 if puissance <= 3 else
+            160 if puissance <= 9 else
+            190 if puissance <= 36 else
             100 if puissance <= 100 else
             0
         )
@@ -268,14 +268,20 @@ def simulation(
             tot_production * prix_vente * (1 - taux_AC) - 
             cout_maintenance
         )
+        benefices_an_vente_totale = tot_production * prix_vente_totale*10 - cout_maintenance
         
         benefices_an_pret = (
             benefices_an_brut - 
             montant_pret_bancaire * taux_pret_bancaire
         )
         amortissement = cout_installation / benefices_an_pret if benefices_an_pret != 0 else float('inf')
+        amortissement_vente_totale = cout_installation / benefices_an_vente_totale
         baisse_facture = benefices_an_pret/(total_consumption*1000*prix_achat/100) # on passe la conso en kWh et le prix en euros
-       
+        tresorerie_20_ans = [-cout_installation]
+        for i in range (1,21) :
+            tresorerie = benefices_an_brut
+            tresorerie_20_ans.append(tresorerie)
+        tri_20_ans = npf.irr(tresorerie_20_ans)
         bilan_20_ans = benefices_an_brut * 20 - cout_installation - montant_pret_bancaire * taux_pret_bancaire*0.01 * duree_pret_bancaire
         result = {
             "puissance": puissance,
@@ -286,7 +292,8 @@ def simulation(
             "autoconso": round(taux_AC * 100, 1),
             "autoprod": round(taux_AP * 100, 1),
             "bilan_20_ans": round(bilan_20_ans, 3 - int(math.floor(math.log10(abs(bilan_20_ans)))) - 1),
-            "tri": 1, # TODO
+            "tri": round(tri_20_ans * 100, 1),
+            "amortissement_vente_totale" : round(amortissement_vente_totale, 3 - int(math.floor(math.log10(abs(amortissement_vente_totale)))) - 1),
         }
         logging.info(f"Simulation result for puissance {puissance}: {result}")
         return result
